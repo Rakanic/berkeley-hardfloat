@@ -40,10 +40,20 @@ package hardfloat
 import chisel3._
 
 object rawFloatFromFN {
-  def apply(expWidth: Int, sigWidth: Int, in: Bits) = {
-    val sign = in(expWidth + sigWidth - 1)
-    val expIn = in(expWidth + sigWidth - 2, sigWidth - 1)
-    val fractIn = in(sigWidth - 2, 0)
+  def apply(_expWidth: Int, _sigWidth: Int, in: Bits) = {
+    val sign = in(_expWidth + _sigWidth - 1)
+    val _expIn = in(_expWidth + _sigWidth - 2, _sigWidth - 1)
+    val _fractIn = in(_sigWidth - 2, 0)
+
+    val (expIn, fractIn, expWidth, sigWidth) =
+      if (_expWidth + _sigWidth == 8) {
+        if (_expWidth == 4)
+          (((_fractIn.andR).asUInt ## _expIn) + 8.U, _fractIn, 5, _sigWidth)
+        else
+          (_expIn, _fractIn ## 0.U(1.W), _expWidth, 4)
+      } else
+          (_expIn, _fractIn, _expWidth, _sigWidth)
+      
 
     val isZeroExpIn = (expIn === 0.U)
     val isZeroFractIn = (fractIn === 0.U)
@@ -72,3 +82,47 @@ object rawFloatFromFN {
   }
 }
 
+// object rawFromF8e4m3 {
+//   def apply(expWidth: Int, sigWidth: Int, in: Bits) = {
+//     val sign    = in(7)
+//     val expIn   = in(6, 3)  // exponent field
+//     val fractIn = in(2, 0)  // fraction field
+//     val bias    = 7
+//     val expWidthOut = 5
+//     val sigWidthOut = 11
+//     val biasOut = 15
+
+//     val isZeroExpIn = (expIn === 0.U)
+//     val isZero = isZeroExpIn && fractIn === 0.U
+//     // E4M3 has no infinity only NaN:
+//     val isNaN = expIn === "b1111".U && fractIn === "b111".U
+
+//     // Compute the signed, unbiased exponent (sExp)
+//     val sExp = Wire(SInt((expWidth + 2).W))
+//     when (expIn === 0.U) {
+//       // subnormal
+//       sExp := (1.S - bias.S)
+//     } .otherwise {
+//       // normal
+//       sExp := expIn.asSInt - bias.S
+//     }
+
+//     val sig = Wire(UInt((sigWidth + 1).W))
+//     val normDist = countLeadingZeros(fractIn)
+//     val subnormFract = (fractIn << normDist) (sigWidth - 3, 0) << 1
+//     sig = 0.U(1.W) ## !isZero ## Mux(isZeroExpIn, subnormFract, fractIn)
+    
+//     val sExpOut = sExp + biasOut.S
+//     val sigOut = sigIn << (sigWidthOut - sigWidth)
+
+//     val out = Wire(new RawFloat(5, 11))
+//     out.sign   := sign
+//     out.isNaN  := false.B // E4M3 has no NaN
+//     out.isInf  := isNaN
+//     out.isZero := isZero
+//     out.sExp   := sExpOut
+//     out.sig    := sigOut
+
+//     out
+//   }
+// }
