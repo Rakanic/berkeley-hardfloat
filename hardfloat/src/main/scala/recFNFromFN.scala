@@ -41,9 +41,19 @@ import chisel3._
 
 object recFNFromFN
 {
-    def apply(expWidth: Int, sigWidth: Int, in: Bits) =
+    def apply(_expWidth: Int, _sigWidth: Int, in: Bits) =
     {
-        val rawIn = rawFloatFromFN(expWidth, sigWidth, in)
+        val (expWidth, sigWidth) =
+        if (_expWidth + _sigWidth == 8) { 
+            if (_expWidth == 4)
+            (5, _sigWidth)
+            else
+            (_expWidth, 4)
+        } else {
+            (_expWidth, _sigWidth)
+        }
+
+        val rawIn = rawFloatFromFN(_expWidth, _sigWidth, in)
         rawIn.sign ##
           (Mux(rawIn.isZero, 0.U(3.W), rawIn.sExp(expWidth, expWidth - 2)) |
                 Mux(rawIn.isNaN, 1.U, 0.U)) ##
