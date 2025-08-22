@@ -45,6 +45,8 @@ object rawFloatFromFN {
     val _expIn = in(_expWidth + _sigWidth - 2, _sigWidth - 1)
     val _fractIn = in(_sigWidth - 2, 0)
 
+    val isFP4 = (_expWidth + _sigWidth) == 4
+
     val (expIn, fractIn, expWidth, sigWidth, adjustedSubnormExp) =
       if (_expWidth + _sigWidth == 8) { 
         if (_expWidth == 4)
@@ -52,21 +54,37 @@ object rawFloatFromFN {
           Mux(_expIn.andR && _fractIn.andR, 0.U, 8.U), _fractIn, 5, _sigWidth, true.B)
         else
           (_expIn, _fractIn ## 0.U(1.W), _expWidth, 4, false.B)
-      } else
+      } else if (_expWidth + _sigWidth == 4) {
+        ((0.U(1.W) ## _expIn) + 2.U, _fractIn, 3, 2, false.B)
+      } else {
           (_expIn, _fractIn, _expWidth, _sigWidth, false.B)
-      
+      }
 
     val isZeroExpIn = (_expIn === 0.U)
     val isZeroFractIn = (_fractIn === 0.U)
 
     val normDist = countLeadingZeros(fractIn)
-    val subnormFract = (fractIn << normDist) (sigWidth - 3, 0) << 1
+
+    val subnormFract = 
+      if (!isFP4) {
+        (fractIn << normDist) (sigWidth - 3, 0) << 1
+      } else {
+        0.U((sigWidth - 1).W)
+      }
+
     val adjustedExp =
-      Mux(isZeroExpIn,
-        normDist ^ ((BigInt(1) << (expWidth + 1)) - 1).U,
-        expIn
-      ) + ((BigInt(1) << (expWidth - 1)).U + Mux(isZeroExpIn && adjustedSubnormExp, 8.U, 0.U)
-        | Mux(isZeroExpIn, 2.U, 1.U))
+      if (!isFP4) {
+        Mux(isZeroExpIn,
+          normDist ^ ((BigInt(1) << (expWidth + 1)) - 1).U,
+          expIn
+        ) + ((BigInt(1) << (expWidth - 1)).U + Mux(isZeroExpIn && adjustedSubnormExp, 8.U, 0.U)
+          | Mux(isZeroExpIn, 2.U, 1.U))
+      } else {
+        // 0b00111.U
+        Mux(isZeroExpIn,
+          0b00111.U(5.W),
+          expIn +& ((BigInt(1) << (expWidth - 1)).U | 1.U))
+      }
 
     val isZero = isZeroExpIn && isZeroFractIn
     val isSpecial = adjustedExp(expWidth, expWidth - 1) === 3.U
