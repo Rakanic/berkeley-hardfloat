@@ -51,6 +51,8 @@ object recFNFromFN
             (_expWidth, 4)
         } else if (_expWidth + _sigWidth == 4) {
             (3, 2)
+        } else if (_expWidth + _sigWidth == 6) {
+            (4, 4)
         }
         else {
             (_expWidth, _sigWidth)

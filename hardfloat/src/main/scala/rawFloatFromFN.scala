@@ -46,16 +46,25 @@ object rawFloatFromFN {
     val _fractIn = in(_sigWidth - 2, 0)
 
     val isFP4 = (_expWidth + _sigWidth) == 4
+    val isFP6 = (_expWidth + _sigWidth) == 6
+    val isFP8 = (_expWidth + _sigWidth) == 8
+    val bias_adjust = if (isFP4) 2.U else if (isFP6 && _expWidth == 2) 6.U else if (isFP6 && _expWidth == 3) 4.U else if (isFP8) 8.U else 0.U
 
     val (expIn, fractIn, expWidth, sigWidth, adjustedSubnormExp) =
-      if (_expWidth + _sigWidth == 8) { 
+      if (isFP8) { 
         if (_expWidth == 4)
           (((in(_expWidth + _sigWidth - 2, 0).andR).asUInt ## _expIn) + 
-          Mux(_expIn.andR && _fractIn.andR, 0.U, 8.U), _fractIn, 5, _sigWidth, true.B)
+          Mux(_expIn.andR && _fractIn.andR, 0.U, bias_adjust), _fractIn, 5, _sigWidth, true.B)
         else
           (_expIn, _fractIn ## 0.U(1.W), _expWidth, 4, false.B)
-      } else if (_expWidth + _sigWidth == 4) {
-        ((0.U(1.W) ## _expIn) + 2.U, _fractIn, 3, 2, false.B)
+      } else if (isFP6) {
+        if (_expWidth == 2){
+          ((0.U(2.W) ## _expIn) + bias_adjust, _fractIn, 4, 4, true.B)
+        } else {
+          ((0.U(1.W) ## _expIn) + bias_adjust, _fractIn ## 0.U(1.W), 4, 4, true.B)
+        }
+      } else if (isFP4) {
+        ((0.U(1.W) ## _expIn) + bias_adjust, _fractIn, 3, 2, false.B)
       } else {
           (_expIn, _fractIn, _expWidth, _sigWidth, false.B)
       }
@@ -77,8 +86,8 @@ object rawFloatFromFN {
         Mux(isZeroExpIn,
           normDist ^ ((BigInt(1) << (expWidth + 1)) - 1).U,
           expIn
-        ) + ((BigInt(1) << (expWidth - 1)).U + Mux(isZeroExpIn && adjustedSubnormExp, 8.U, 0.U)
-          | Mux(isZeroExpIn, 2.U, 1.U))
+        ) + ((BigInt(1) << (expWidth - 1)).U 
+          | Mux(isZeroExpIn, 2.U, 1.U)) + Mux(isZeroExpIn && adjustedSubnormExp, bias_adjust, 0.U)
       } else {
         // 0b00111.U
         Mux(isZeroExpIn,
@@ -101,47 +110,3 @@ object rawFloatFromFN {
   }
 }
 
-// object rawFromF8e4m3 {
-//   def apply(expWidth: Int, sigWidth: Int, in: Bits) = {
-//     val sign    = in(7)
-//     val expIn   = in(6, 3)  // exponent field
-//     val fractIn = in(2, 0)  // fraction field
-//     val bias    = 7
-//     val expWidthOut = 5
-//     val sigWidthOut = 11
-//     val biasOut = 15
-
-//     val isZeroExpIn = (expIn === 0.U)
-//     val isZero = isZeroExpIn && fractIn === 0.U
-//     // E4M3 has no infinity only NaN:
-//     val isNaN = expIn === "b1111".U && fractIn === "b111".U
-
-//     // Compute the signed, unbiased exponent (sExp)
-//     val sExp = Wire(SInt((expWidth + 2).W))
-//     when (expIn === 0.U) {
-//       // subnormal
-//       sExp := (1.S - bias.S)
-//     } .otherwise {
-//       // normal
-//       sExp := expIn.asSInt - bias.S
-//     }
-
-//     val sig = Wire(UInt((sigWidth + 1).W))
-//     val normDist = countLeadingZeros(fractIn)
-//     val subnormFract = (fractIn << normDist) (sigWidth - 3, 0) << 1
-//     sig = 0.U(1.W) ## !isZero ## Mux(isZeroExpIn, subnormFract, fractIn)
-    
-//     val sExpOut = sExp + biasOut.S
-//     val sigOut = sigIn << (sigWidthOut - sigWidth)
-
-//     val out = Wire(new RawFloat(5, 11))
-//     out.sign   := sign
-//     out.isNaN  := false.B // E4M3 has no NaN
-//     out.isInf  := isNaN
-//     out.isZero := isZero
-//     out.sExp   := sExpOut
-//     out.sig    := sigOut
-
-//     out
-//   }
-// }
